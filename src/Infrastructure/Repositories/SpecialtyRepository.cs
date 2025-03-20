@@ -4,12 +4,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ClinAgenda.src.Application.DTOs.Specialty;
+using ClinAgenda.src.Core.Interfaces;
 using Dapper;
 using MySql.Data.MySqlClient;
 
 namespace ClinAgenda.src.Infrastructure.Repositories
 {
-    public class SpecialtyRepository
+    public class SpecialtyRepository : ISpecialtyRepository
     {
         private readonly MySqlConnection _connection; // Conexão com o banco de dados.
 
@@ -94,6 +95,16 @@ namespace ClinAgenda.src.Infrastructure.Repositories
             var status = await _connection.QueryAsync<SpecialtyDTO>(dataQuery, parameters);
 
             return (total, status); // Retorna o total de registros e a lista de status paginada.
+        }
+
+        public Task<int> InsertSpecialtyAsync(SpecialtyInsertDTO specialtyInsertDTO)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<int> DeleteSpecialtyAsync(int id)
+        {
+            throw new NotImplementedException();
         }
     }
 }
