@@ -1,117 +1,117 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using ClinAgenda.src.Application.DTOs.Patient;
+using ClinAgenda.src.Core.Interfaces;
 using Dapper;
 using MySql.Data.MySqlClient;
 
 namespace ClinAgenda.src.Infrastructure.Repositories
 {
-    public class PatientRepository
+    public class PatientRepository : IPatientRepository
     {
-        private readonly MySqlConnection _connection; // Conexão com o banco de dados.
+        private readonly MySqlConnection _connection;
 
-        // Construtor que recebe a conexão com o banco de dados via injeção de dependência.
         public PatientRepository(MySqlConnection connection)
         {
             _connection = connection;
         }
 
-         // Método assíncrono para buscar um status pelo ID.
-        public async Task<PatientDTO> GetByIdAsync(int id)
+         public async Task<PatientDTO> GetByIdAsync(int id)
         {
-            // Query SQL para selecionar o status pelo ID.
-            string query = @"
-            SELECT ID, 
-                   NAME,
-                   PHONENUMBER,
-                   DOCUMENTNUMBER,
-                   STATUSID,
-                   BIRTHDATE,
-            FROM PATIENT
-            WHERE ID = @Id";
+            const string query = @"
+                SELECT 
+                    ID, 
+                    NAME,
+                    PHONENUMBER,
+                    DOCUMENTNUMBER,
+                    STATUSID,
+                    BIRTHDATE 
+                FROM PATIENT
+                WHERE ID = @Id";
 
-            var parameters = new { Id = id }; // Parâmetro da query.
+            var patient = await _connection.QueryFirstOrDefaultAsync<PatientDTO>(query, new { Id = id });
 
-            // Executa a consulta no banco e retorna o primeiro resultado ou null caso não encontre.
-            var patient = await _connection.QueryFirstOrDefaultAsync<PatientDTO>(query, parameters);
-
-            return patient; // Retorna o status encontrado.
+            return patient;
         }
-
-        // Método assíncrono para excluir um status pelo ID.
-        public async Task<int> DeleteStatusAsync(int id)
+         public async Task<(int total, IEnumerable<PatientListDTO> patient)> GetPatientsAsync(string? name, string? documentNumber, int? statusId, int itemsPerPage, int page)
         {
-            // Query SQL para deletar um status pelo ID.
-            string query = @"
-            DELETE FROM STATUS
-            WHERE ID = @Id";
+            var queryBase = new StringBuilder(@"     
+                    FROM PATIENT P
+                    INNER JOIN STATUS S ON S.ID = P.STATUSID
+                    WHERE 1 = 1");
 
-            var parameters = new { Id = id }; // Parâmetro da query.
+            var parameters = new DynamicParameters();
 
-            // Executa a query e retorna o número de linhas afetadas.
-            var rowsAffected = await _connection.ExecuteAsync(query, parameters);
+            if (!string.IsNullOrEmpty(name))
+            {
+                queryBase.Append(" AND P.NAME LIKE @Name");
+                parameters.Add("Name", $"%{name}%");
+            }
 
-            return rowsAffected; // Retorna quantas linhas foram afetadas (1 se deletou, 0 se não encontrou o ID).
-        }
+            if (!string.IsNullOrEmpty(documentNumber))
+            {
+                queryBase.Append(" AND P.DOCUMENTNUMBER LIKE @DocumentNumber");
+                parameters.Add("DocumentNumber", $"%{documentNumber}%");
+            }
 
-        // Método assíncrono para inserir um novo status no banco.
-        public async Task<int> InsertStatusAsync(PatientInsertDTO statusInsertDTO)
-        {
-            // Query SQL para inserir um novo status e obter o ID gerado.
-            string query = @"
-            INSERT INTO STATUS (NAME) 
-            VALUES (@Name);
-            SELECT LAST_INSERT_ID();"; // Obtém o ID do último registro inserido.
+            if (statusId.HasValue)
+            {
+                queryBase.Append(" AND S.ID = @StatusId");
+                parameters.Add("StatusId", statusId.Value);
+            }
 
-            // Executa a query e retorna o ID do novo status.
-            return await _connection.ExecuteScalarAsync<int>(query, statusInsertDTO);
-        }
-
-        // Método assíncrono para obter todos os status com paginação.
-        public async Task<(int total, IEnumerable<PatientDTO> patients)> GetAllAsync(int? itemsPerPage, int? page)
-        {
-            // Construção dinâmica da query base.
-            var queryBase = new StringBuilder(@"
-                FROM STATUS S WHERE 1 = 1"); // "1 = 1" é usado para facilitar adição de filtros dinâmicos.
-
-            var parameters = new DynamicParameters(); // Objeto para armazenar os parâmetros da query.
-
-            // Query para contar o número total de registros sem a paginação.
-            var countQuery = $"SELECT COUNT(DISTINCT S.ID) {queryBase}";
+            var countQuery = $"SELECT COUNT(DISTINCT P.ID) {queryBase}";
             int total = await _connection.ExecuteScalarAsync<int>(countQuery, parameters);
 
-            // Query para buscar os dados paginados.
             var dataQuery = $@"
-            SELECT ID, 
-            NAME,
-            PHONENUMBER,
-            DOCUMENTNUMBER,
-            STATUSID,
-            BIRTHDATE,
-            {queryBase}
-            LIMIT @Limit OFFSET @Offset";
+                    SELECT 
+                        P.ID, 
+                        P.NAME,
+                        P.PHONENUMBER,
+                        P.DOCUMENTNUMBER,
+                        P.BIRTHDATE ,
+                        P.STATUSID AS STATUSID, 
+                        S.NAME AS STATUSNAME
+                    {queryBase}
+                    ORDER BY P.ID
+                    LIMIT @Limit OFFSET @Offset";
 
-            // Adiciona os parâmetros de paginação.
             parameters.Add("Limit", itemsPerPage);
             parameters.Add("Offset", (page - 1) * itemsPerPage);
 
-            // Executa a consulta e retorna os resultados.
-            var status = await _connection.QueryAsync<PatientDTO>(dataQuery, parameters);
+            var patients = await _connection.QueryAsync<PatientListDTO>(dataQuery, parameters);
 
-            return (total, status); // Retorna o total de registros e a lista de status paginada.
+            return (total, patients);
         }
-
-        public Task<int> InsertSpecialtyAsync(PatientInsertDTO specialtyInsertDTO)
+        public async Task<int> InsertPatientAsync(PatientInsertDTO patient)
         {
-            throw new NotImplementedException();
+            string query = @"
+            INSERT INTO Patient (name, phoneNumber, documentNumber, statusId, birthDate) 
+            VALUES (@Name, @PhoneNumber, @DocumentNumber, @StatusId, @BirthDate);
+            SELECT LAST_INSERT_ID();";
+            return await _connection.ExecuteScalarAsync<int>(query, patient);
         }
-
-        public Task<int> DeleteSpecialtyAsync(int id)
+        public async Task<bool> UpdateAsync(PatientDTO patient)
         {
-            throw new NotImplementedException();
+            string query = @"
+            UPDATE Patient SET 
+                Name = @Name,
+                phoneNumber = @PhoneNumber,
+                documentNumber = @DocumentNumber,
+                birthDate = @BirthDate,
+                StatusId = @StatusId
+            WHERE Id = @Id;";
+            int rowsAffected = await _connection.ExecuteAsync(query, patient);
+            return rowsAffected > 0;
+        }
+        public async Task<int> DeleteByPatientIdAsync(int id)
+        {
+            string query = "DELETE FROM Patient WHERE ID = @Id";
+
+            var parameters = new { Id = id };
+
+            var rowsAffected = await _connection.ExecuteAsync(query, parameters);
+
+            return rowsAffected;
         }
     }
 }
