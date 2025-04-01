@@ -77,9 +77,7 @@ namespace ClinAgenda.src.Application.UseCases
         {
             var rawData = await _doctorRepository.GetByIdAsync(id);
 
-            var result = new
-            {
-                item = rawData
+            var infoDoctor = rawData
                     .GroupBy(item => item.Id)
                     .Select(group => new
                     {
@@ -97,14 +95,10 @@ namespace ClinAgenda.src.Application.UseCases
                             id = group.First().StatusId,
                             name = group.First().StatusName
                         }
-                    })
-                .ToList()
-            };
+                    }).First();
+                
 
-            return new
-            {
-                item = result.item
-            };
+            return infoDoctor;
 
         }
         public async Task<bool> UpdateDoctorAsync(int id, DoctorInsertDTO doctorDto)

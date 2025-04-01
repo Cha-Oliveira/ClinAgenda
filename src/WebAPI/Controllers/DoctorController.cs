@@ -51,7 +51,9 @@ namespace ClinAgenda.src.WebAPI.Controllers
 
                 if (notFoundSpecialties.Any())
                 {
-                    return BadRequest(notFoundSpecialties.Count > 1 ? $"As especialidades com os IDs {string.Join(", ", notFoundSpecialties)} não existem." : $"A especialidade com o ID {notFoundSpecialties.First().ToString()} não existe.");
+                    return BadRequest(notFoundSpecialties.Count > 1 ? 
+                    $"As especialidades com os IDs {string.Join(", ", notFoundSpecialties)
+                    } não existem." : $"A especialidade com o ID {notFoundSpecialties.First().ToString()} não existe.");
                 }
 
                 var createdDoctorId = await _doctorUseCase.CreateDoctorAsync(doctor);
